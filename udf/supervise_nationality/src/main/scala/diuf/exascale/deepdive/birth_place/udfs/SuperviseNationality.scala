@@ -42,7 +42,8 @@ object SuperviseNationality extends Deepdive{
         if(intermediate_lemmas.length > MAX_DIST) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], -1, "neg:far_apart")
         if(intermediate_ner_tags.contains("MISC")) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], -1, "neg:another_nationality_between")
         if(intermediate_ner_tags.contains("PERSON")) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], -1, "neg:another_person_between")
-        if(VERB.intersect(intermediate_lemmas).length > 0 && VERB_POS.intersect(intermediate_pos).length == 1) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], 2, "pos:be_between")
+        if(VERB.intersect(intermediate_lemmas).length > 0) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], 2, "pos:be_between")
+        if(VERB_POS.intersect(intermediate_pos).length > 1) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], -1, "pos:other_verbs")
         born_in
       }
     }.toDF("person_id", "place_id", "label", "rule_id").cache

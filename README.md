@@ -1,4 +1,4 @@
-# Birth place DeepDive applicatio
+# Birth place DeepDive application
 
 ## Installation
 1. configure the application according to your spark and hadoop setups.

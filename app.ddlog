@@ -1,0 +1,323 @@
+## prediction variable ########################################################
+
+born_in?(
+    person_id text,
+    place_id text
+).
+
+## Input Data #################################################################
+@source
+articles(
+    @key
+    @distributed_by
+    id text,
+    @searchable
+    content text
+).
+
+nationalities(
+    country text,
+    nationality text
+).
+
+
+## NLP markup #################################################################
+@source
+sentences(
+    @key
+    @distributed_by
+    # XXX This breaks the search index.  @source should not be derived from another @source
+    #@references(relation="articles", column="id")
+    doc_id         text,
+    @key
+    sentence_index int,
+    @searchable
+    sentence_text  text,
+    tokens         text[],
+    lemmas         text[],
+    pos_tags       text[],
+    ner_tags       text[],
+    doc_offsets    int[],
+    dep_types      text[],
+    dep_tokens     int[]
+).
+
+function nlp_markup over (
+        doc_id text,
+        content text
+    ) returns rows like sentences
+    implementation "udf/nlp_markup/target/scala-2.11/nlp_markup-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.NLPmarkup" handles tsv lines.
+
+sentences += nlp_markup(doc_id, content) :-
+    articles(doc_id, content).
+
+
+## Entity_mention ###########################################################
+
+person_mention(
+    mention_id     text,
+    mention_text   text,
+    doc_id         text,
+    sentence_index int,
+    begin_index    int,
+    end_index      int
+).
+
+function find_person_mention over (
+        doc_id         text,
+        sentence_index int,
+        tokens         text[],
+        ner_tags       text[]
+    ) returns rows like born_place_mention
+    implementation "udf/person_mention/target/scala-2.11/person_mention-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.PersonMention" handles tsv lines.
+
+
+person_mention += find_person_mention(
+    doc_id, sentence_index, tokens, ner_tags
+) :-
+    sentences(doc_id, sentence_index, _, tokens, _, _, ner_tags, _, _, _).
+
+place_mention(
+    mention_id     text,
+    mention_text   text,
+    doc_id         text,
+    sentence_index int,
+    begin_index    int,
+    end_index      int
+).
+
+function find_place_mention over (
+        doc_id         text,
+        sentence_index int,
+        tokens         text[],
+        ner_tags       text[]
+    ) returns rows like place_mention
+    implementation "udf/place_mention/target/scala-2.11/place_mention-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.PlaceMention" handles tsv lines.
+
+
+place_mention += find_place_mention(
+    doc_id, sentence_index, tokens, ner_tags
+) :-
+    sentences(doc_id, sentence_index, _, tokens, _, _, ner_tags, _, _, _).
+
+nationality_mention(
+    mention_id     text,
+    mention_text   text,
+    doc_id         text,
+    sentence_index int,
+    begin_index    int,
+    end_index      int
+).
+
+function find_nationality_mention over (
+        doc_id         text,
+        sentence_index int,
+        tokens         text[],
+        ner_tags       text[]
+    ) returns rows like nationality_mention
+    implementation "udf/nationality_mention/target/scala-2.11/nationality_mention-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.NationalityMention" handles tsv lines.
+
+
+nationality_mention += find_nationality_mention(
+    doc_id, sentence_index, tokens, ner_tags
+) :-
+    sentences(doc_id, sentence_index, _, tokens, _, _, ner_tags, _, _, _).
+
+## born_place_candidate #########################################################
+
+born_place_candidate(
+    person_id   text,
+    person_name text,
+    place_id   text,
+    place_name text
+).
+
+num_person(doc_id, sentence_index, COUNT(p)) :-
+    person_mention(p, _, doc_id, sentence_index, _, _).
+
+num_place(doc_id, sentence_index, COUNT(p)) :-
+    place_mention(p, _, doc_id, sentence_index, _, _).
+
+born_place_candidate(person_id, person_name, place_id, place_name) :-
+    num_person(same_doc, same_sentence, num_person),
+    num_place(same_doc, same_sentence, num_place),
+    person_mention(person_id, person_name, same_doc, same_sentence, _, _),
+    place_mention(place_id, place_name, same_doc, same_sentence, _, _),
+    num_person < 3,
+    num_place < 3.
+
+
+## person_nationality_candidate #########################################################
+
+person_nationality_candidate(
+    person_id   text,
+    person_name text,
+    nationality_id   text,
+    nationality_name text
+).
+
+num_nationality(doc_id, sentence_index, COUNT(p)) :-
+    nationality_mention(p, _, doc_id, sentence_index, _, _).
+
+person_nationality_candidate(person_id, person_name, nationality_id, country_name) :-
+    num_person(same_doc, same_sentence, num_person),
+    num_nationality(same_doc, same_sentence, num_nationality),
+    person_mention(person_id, person_name, same_doc, same_sentence, _, _),
+    nationality_mention(nationality_id, nationality_name, same_doc, same_sentence, _, _),
+    nationalities(country_name, nationality_name),
+    num_person < 3,
+    num_nationality < 3.
+
+
+## feature extraction ####################################################
+
+candidate_feature(
+    person_id   text,
+    place_id   text,
+    feature text
+).
+
+
+function extract_candidate_features over (
+        person_id          text,
+        place_id          text,
+        person_begin_index int,
+        person_end_index   int,
+        place_begin_index int,
+        place_end_index   int,
+        doc_id         text,
+        sent_index     int,
+        tokens         text[],
+        lemmas         text[],
+        pos_tags       text[],
+        ner_tags       text[],
+        dep_types      text[],
+        dep_tokens     int[]
+    ) returns rows like spouse_feature
+    implementation "udf/extract_candidate_features/extract_candidate_features.py udf/extract_candidate_features/util.py" handles tsv lines.
+
+candidate_feature += extract_candidate_features(
+    person_id, place_id, person_begin_index, person_end_index, place_begin_index, place_end_index,
+    doc_id, sent_index, tokens, lemmas, pos_tags, ner_tags, dep_types, dep_tokens
+) :-
+    person_mention(person_id, _, doc_id, sent_index, person_begin_index, person_end_index),
+    place_mention(place_id, _, doc_id, sent_index, place_begin_index, place_end_index),
+    sentences(doc_id, sent_index, _, tokens, lemmas, pos_tags, ner_tags, _, dep_types, dep_tokens).
+    
+candidate_feature += extract_candidate_features(
+    person_id, nationality_id, person_begin_index, person_end_index, nationality_begin_index, nationality_end_index,
+    doc_id, sent_index, tokens, lemmas, pos_tags, ner_tags, dep_types, dep_tokens
+) :-
+    person_mention(person_id, _, doc_id, sent_index, person_begin_index, person_end_index),
+    nationality_mention(nationality_id, _, doc_id, sent_index, nationality_begin_index, nationality_end_index),
+    sentences(doc_id, sent_index, _, tokens, lemmas, pos_tags, ner_tags, _, dep_types, dep_tokens).
+
+## supervision ############################################################
+
+candidate_label(
+    person_id   text,
+    place_id   text,
+    label   int,
+    rule_id text
+).
+
+candidate_label(person_id, place_id, 0, NULL) :- born_place_candidate(person_id, _, place_id, _). # null labels
+candidate_label(person_id, country_id, 0, NULL) :- person_nationality_candidate(person_id, _, country_id, _).
+
+function supervise over (
+        person_id text, person_begin int, person_end int,
+        place_id text, place_begin int, place_end int,
+        doc_id         text,
+        sentence_index int,
+        sentence_text  text,
+        tokens         text[],
+        lemmas         text[],
+        pos_tags       text[],
+        ner_tags       text[],
+        dep_types      text[],
+        dep_tokens     int[]
+    ) returns rows like candidate_label
+    implementation "udf/supervise/target/scala-2.11/supervise-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.Supervise" handles tsv lines.
+
+candidate_label += supervise(
+    person_id, person_begin, person_end,
+    place_id, place_begin, place_end,
+    doc_id, sentence_index, sentence_text,
+    tokens, lemmas, pos_tags, ner_tags, dep_types, dep_token_indexes
+) :-
+    born_place_candidate(person_id, _, place_id, _),
+    person_mention(person_id, person_text, doc_id, sentence_index, person_begin, person_end),
+    place_mention(place_id, place_text, _, _, place_begin, place_end),
+    sentences(
+        doc_id, sentence_index, sentence_text,
+        tokens, lemmas, pos_tags, ner_tags, _, dep_types, dep_token_indexes
+    ).
+    
+function supervise_nationality over (
+        person_id text, person_begin int, person_end int,
+        place_id text, place_begin int, place_end int,
+        doc_id         text,
+        sentence_index int,
+        sentence_text  text,
+        tokens         text[],
+        lemmas         text[],
+        pos_tags       text[],
+        ner_tags       text[],
+        dep_types      text[],
+        dep_tokens     int[]
+    ) returns rows like candidate_label
+    implementation "udf/supervise_nationality/target/scala-2.11/supervise_nationality-assembly-1.0.jar diuf.exascale.deepdive.birth_place.udfs.SuperviseNationality" handles tsv lines.
+
+candidate_label += supervise(
+    person_id, person_begin, person_end,
+    nationality_id, nationality_begin, nationality_end,
+    doc_id, sentence_index, sentence_text,
+    tokens, lemmas, pos_tags, ner_tags, dep_types, dep_token_indexes
+) :-
+    person_nationality_candidate(person_id, _, nationality_id, _),
+    person_mention(person_id, person_text, doc_id, sentence_index, person_begin, person_end),
+    nationality_mention(nationality_id, nationality_text, _, _, nationality_begin, nationality_end),
+    sentences(
+        doc_id, sentence_index, sentence_text,
+        tokens, lemmas, pos_tags, ner_tags, _, dep_types, dep_token_indexes
+    ).
+
+## voting ####################################################################
+
+candidate_label_resolved(person_id, place_id, SUM(vote)) :- candidate_label(person_id, place_id, vote, rule_id).
+
+born_in(person_id, place_id) = if l > 0 then TRUE
+                      else if l < 0 then FALSE
+                      else NULL end :- candidate_label_resolved(person_id, place_id, l).
+
+## specifying features #######################################################
+
+@weight(f)
+born_in(person_id, place_id) :-
+    born_place_candidate(person_id, _, place_id, _),
+    candidate_feature(person_id, place_id, f).
+    
+    
+@weight(f)
+born_in(person_id, place_id) :-
+    person_nationality_candidate(person_id, _, place_id, _),
+    candidate_feature(person_id, place_id, f).
+
+
+@weight(-0.5)
+born_in(person_id, place_id) => born_in(person_id, place2_id) :-
+    born_place_candidate(person_id, _, place_id, _),
+    born_place_candidate(person_id, _, place2_id, _).
+    
+    
+@weight(-1.0)
+born_in(person_id, place_id) => born_in(person_id, place2_id) :-
+    person_nationality_candidate(person_id, _, place_id, _),
+    person_nationality_candidate(person_id, _, place2_id, _).
+
+
+@weight(-0.5)
+born_in(person_id, place_id) => born_in(person_id, place2_id) :-
+    born_place_candidate(person_id, _, place1_id, place1_text),
+    person_nationality_candidate(person_id, _, place2_id, place2_text),
+    place2_text = place1_text.

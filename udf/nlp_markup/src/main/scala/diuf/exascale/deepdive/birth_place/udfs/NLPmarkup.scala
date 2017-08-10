@@ -79,9 +79,9 @@ object NLPmarkup extends Deepdive {
       }
     }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens")
     
-    val filtered = sen_tags.rdd.filter{
-		 r => if(r(3).asInstanceOf[mutable.WrappedArray[String]].length != r(8).asInstanceOf[mutable.WrappedArray[String]].length) true else false
-	 }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens")
+    val filtered = sen_tags.filter{
+      r => if(r(3).asInstanceOf[mutable.WrappedArray[String]].length == r(8).asInstanceOf[mutable.WrappedArray[String]].length) true else false
+    }.cache
     
     save(filtered)
 

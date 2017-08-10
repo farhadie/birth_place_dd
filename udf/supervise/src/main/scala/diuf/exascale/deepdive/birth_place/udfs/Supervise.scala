@@ -24,7 +24,6 @@ object Supervise extends Deepdive{
     import spark.implicits._
     load_tables(args,spark)
     val inputDF = spark.sql(args(1))
-    inputDF.show
 
     val BORN = Array("bear")
     val NEGATIVE = Array("graduate", "live", "play", "die", "attend", "move")
@@ -44,7 +43,7 @@ object Supervise extends Deepdive{
         if(NEGATIVE.intersect(intermediate_lemmas).length > 0) born_in = born_in :+ (r(0).asInstanceOf[String], r(3).asInstanceOf[String], -2, "neg:other_verbs_between")
         born_in
       }
-    }.toDF("person_id", "place_id", "label", "rule_id").cache
+    }.toDF("person_id", "place_id", "label", "rule_id")
     save(labled)
 
     val t1 = System.nanoTime() //time measurement

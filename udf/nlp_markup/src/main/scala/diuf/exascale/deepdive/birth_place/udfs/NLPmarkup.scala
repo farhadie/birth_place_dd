@@ -34,7 +34,7 @@ object NLPmarkup extends Deepdive {
         r(1).asInstanceOf[mutable.WrappedArray[String]].zipWithIndex.map {
           sen => (r(0).asInstanceOf[String], sen._2, sen._1)
         }
-    }.toDF("doc_id", "sentence_index", "sentence_text").cache
+    }.toDF("doc_id", "sentence_index", "sentence_text")
     val sen_tags = sentences.select('doc_id, 'sentence_index, 'sentence_text, tokenize('sentence_text),
       lemma('sentence_text), pos('sentence_text), ner('sentence_text), depparse('sentence_text)).map {
       r => {
@@ -66,7 +66,7 @@ object NLPmarkup extends Deepdive {
 			while(dep(4).asInstanceOf[Int] > dep_tokens.length + 1){
 				dep_types = dep_types :+ ""
 				dep_tokens = dep_tokens :+ 0
-				
+
 			}
 			dep_types = dep_types :+ dep(2).asInstanceOf[String]
 			dep_tokens = dep_tokens :+ dep(1).asInstanceOf[Int]
@@ -77,7 +77,7 @@ object NLPmarkup extends Deepdive {
           r(5).asInstanceOf[mutable.WrappedArray[String]],
           r(6).asInstanceOf[mutable.WrappedArray[String]], doc_offset, dep_types, dep_tokens)
       }
-    }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens").cache
+    }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens")
     save(sen_tags)
 
     val t1 = System.nanoTime() //time measurement

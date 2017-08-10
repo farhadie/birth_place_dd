@@ -22,7 +22,6 @@ object PersonMention extends Deepdive{
     import spark.implicits._
     load_tables(args,spark)
     val inputDF = spark.sql(args(1))
-    inputDF.show
     val mentions = inputDF.flatMap{
       r => {
         val ner_tags = r(3).asInstanceOf[mutable.WrappedArray[String]]
@@ -50,7 +49,7 @@ object PersonMention extends Deepdive{
         }
         p_men
       }
-    }.toDF("mention_id", "mention_text", "doc_id", "sentence_index", "begin_index", "end_index").cache
+    }.toDF("mention_id", "mention_text", "doc_id", "sentence_index", "begin_index", "end_index")
     save(mentions)
 
     val t1 = System.nanoTime() //time measurement

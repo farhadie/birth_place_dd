@@ -78,7 +78,12 @@ object NLPmarkup extends Deepdive {
           r(6).asInstanceOf[mutable.WrappedArray[String]], doc_offset, dep_types, dep_tokens)
       }
     }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens")
-    save(sen_tags)
+    
+    val filtered = sen_tags.rdd.filter{
+		 r => if(r(3).asInstanceOf[mutable.WrappedArray[String]].length != r(8).asInstanceOf[mutable.WrappedArray[String]].length) true else false
+	 }.toDF("doc_id", "sentence_index", "sentence_text", "tokens", "lemmas", "pos_tags", "ner_tags", "doc_offsets", "dep_types", "dep_tokens")
+    
+    save(filtered)
 
     val t1 = System.nanoTime() //time measurement
     println("Elapsed time: " + (t1 - t0) + "ns")
